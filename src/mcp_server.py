@@ -206,25 +206,16 @@ class MCPServer:
 
             result = await self._call_tool(tool_name, arguments)
 
-            # Build content with images for travel searches
-            content = []
-
-            # Add images if available in results
-            images = result.get("images", [])
-            for img in images[:3]:  # Limit to 3 images
-                content.append({
-                    "type": "image",
-                    "data": img.get("url", ""),
-                    "mimeType": "image/jpeg"
-                })
-
-            # Add text result
-            content.append({
-                "type": "text",
-                "text": json.dumps(result, indent=2)
+            # Return text result with image URLs included
+            # Claude can reference the image_url fields in its response
+            return self._response(request_id, {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(result, indent=2)
+                    }
+                ]
             })
-
-            return self._response(request_id, {"content": content})
 
         elif method == "notifications/initialized":
             return None  # No response needed for notifications
