@@ -325,18 +325,44 @@ async def whatsapp_verify(
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
+from fastapi import Request
+import hmac
+import hashlib
+
+APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "")
+
 @app.post("/webhook/whatsapp")
-async def whatsapp_incoming(request: dict):
+async def whatsapp_incoming(request: Request):
     """Handle incoming WhatsApp messages"""
     import logging
     logger = logging.getLogger(__name__)
 
     try:
+        # Get raw body for signature validation
+        body = await request.body()
+        body_str = body.decode('utf-8')
+
+        # Validate signature if APP_SECRET is configured
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        if APP_SECRET and signature:
+            expected_sig = "sha256=" + hmac.new(
+                APP_SECRET.encode(),
+                body,
+                hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(signature, expected_sig):
+                logger.warning("❌ Invalid webhook signature")
+                raise HTTPException(status_code=401, detail="Invalid signature")
+
+        # Parse JSON payload
+        import json
+        payload = json.loads(body_str)
+
         # Log incoming webhook
-        logger.info(f"📱 WhatsApp webhook received: {request}")
+        logger.info(f"📱 WhatsApp webhook received")
 
         # Extract message data
-        entry = request.get("entry", [{}])[0]
+        entry = payload.get("entry", [{}])[0]
         changes = entry.get("changes", [{}])[0]
         value = changes.get("value", {})
 
@@ -383,16 +409,24 @@ async def whatsapp_incoming(request: dict):
 async def webhook_status():
     """Check webhook configuration status"""
     return {
-        "webhook_url": "/webhook/whatsapp",
+        "webhook_endpoint": "/webhook/whatsapp",
         "verify_token": WHATSAPP_VERIFY_TOKEN,
+        "signature_validation": "enabled" if APP_SECRET else "disabled (set WHATSAPP_APP_SECRET)",
         "status": "ready",
-        "instructions": {
-            "1": "Run: ngrok http 8000",
-            "2": "Copy the https URL (e.g., https://abc123.ngrok.io)",
-            "3": "In Meta Developer Portal > WhatsApp > Configuration",
-            "4": "Set Callback URL to: https://YOUR-NGROK-URL/webhook/whatsapp",
-            "5": f"Set Verify Token to: {WHATSAPP_VERIFY_TOKEN}",
-            "6": "Subscribe to: messages, message_deliveries, message_reads"
+        "setup_steps": [
+            "1. Install ngrok: brew install ngrok (or download from ngrok.com)",
+            "2. Run: ngrok http 8000",
+            "3. Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)",
+            "4. Go to: developers.facebook.com → Your App → WhatsApp → Configuration",
+            f"5. Callback URL: <YOUR-NGROK-URL>/webhook/whatsapp",
+            f"6. Verify Token: {WHATSAPP_VERIFY_TOKEN}",
+            "7. Click 'Verify and Save'",
+            "8. Subscribe to: messages, message_deliveries, message_reads"
+        ],
+        "env_vars_needed": {
+            "WHATSAPP_ACCESS_TOKEN": "From App Dashboard → WhatsApp → API Setup",
+            "WHATSAPP_PHONE_NUMBER_ID": "From App Dashboard → WhatsApp → API Setup",
+            "WHATSAPP_APP_SECRET": "From App Dashboard → Settings → Basic → App Secret"
         }
     }
 
