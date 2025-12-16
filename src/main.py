@@ -266,7 +266,6 @@ async def widget_preview():
 @app.get("/logo")
 async def get_logo():
     """Serve the logo file"""
-    # Check common logo locations
     logo_paths = [
         Path(__file__).parent / "static" / "logo.png",
         Path(__file__).parent / "static" / "logo.svg",
@@ -280,6 +279,15 @@ async def get_logo():
             return FileResponse(logo_path, media_type=media_type)
 
     raise HTTPException(status_code=404, detail="Logo not found")
+
+
+@app.get("/logo-circle")
+async def get_logo_circle():
+    """Serve the circular logo for avatars"""
+    logo_path = Path(__file__).parent / "static" / "logo-circle.png"
+    if logo_path.exists():
+        return FileResponse(logo_path, media_type="image/png")
+    raise HTTPException(status_code=404, detail="Circle logo not found")
 
 
 @app.get("/preview/flights", response_class=HTMLResponse)
