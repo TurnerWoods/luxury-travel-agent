@@ -305,6 +305,98 @@ async def flights_preview():
     """)
 
 
+# ============== WhatsApp Webhook ==============
+
+WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "luxurytravel_webhook_2024")
+
+from fastapi import Query
+
+@app.get("/webhook/whatsapp")
+async def whatsapp_verify(
+    hub_mode: str = Query(None, alias="hub.mode"),
+    hub_verify_token: str = Query(None, alias="hub.verify_token"),
+    hub_challenge: str = Query(None, alias="hub.challenge")
+):
+    """WhatsApp webhook verification (GET request from Meta)"""
+    print(f"🔐 Webhook verify: mode={hub_mode}, token={hub_verify_token}")
+    if hub_mode == "subscribe" and hub_verify_token == WHATSAPP_VERIFY_TOKEN:
+        print(f"✅ WhatsApp webhook verified!")
+        return int(hub_challenge) if hub_challenge else "OK"
+    raise HTTPException(status_code=403, detail="Verification failed")
+
+
+@app.post("/webhook/whatsapp")
+async def whatsapp_incoming(request: dict):
+    """Handle incoming WhatsApp messages"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Log incoming webhook
+        logger.info(f"📱 WhatsApp webhook received: {request}")
+
+        # Extract message data
+        entry = request.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
+
+        # Check for incoming messages
+        messages = value.get("messages", [])
+        for message in messages:
+            from_number = message.get("from")
+            msg_type = message.get("type")
+
+            if msg_type == "text":
+                text = message.get("text", {}).get("body", "")
+                logger.info(f"📨 Message from {from_number}: {text}")
+
+                # Handle button replies
+            elif msg_type == "interactive":
+                interactive = message.get("interactive", {})
+                button_reply = interactive.get("button_reply", {})
+                button_id = button_reply.get("id", "")
+                logger.info(f"🔘 Button click from {from_number}: {button_id}")
+
+                # Process button actions
+                if button_id.startswith("book_"):
+                    logger.info(f"📋 Booking request: {button_id}")
+                elif button_id.startswith("details_"):
+                    logger.info(f"ℹ️ Details request: {button_id}")
+                elif button_id.startswith("cart_"):
+                    logger.info(f"🛒 Add to cart: {button_id}")
+
+        # Check for message status updates
+        statuses = value.get("statuses", [])
+        for status in statuses:
+            msg_status = status.get("status")
+            recipient = status.get("recipient_id")
+            logger.info(f"📊 Message to {recipient}: {msg_status}")
+
+        return {"status": "received"}
+
+    except Exception as e:
+        logger.error(f"❌ Webhook error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/webhook/status")
+async def webhook_status():
+    """Check webhook configuration status"""
+    return {
+        "webhook_url": "/webhook/whatsapp",
+        "verify_token": WHATSAPP_VERIFY_TOKEN,
+        "status": "ready",
+        "instructions": {
+            "1": "Run: ngrok http 8000",
+            "2": "Copy the https URL (e.g., https://abc123.ngrok.io)",
+            "3": "In Meta Developer Portal > WhatsApp > Configuration",
+            "4": "Set Callback URL to: https://YOUR-NGROK-URL/webhook/whatsapp",
+            "5": f"Set Verify Token to: {WHATSAPP_VERIFY_TOKEN}",
+            "6": "Subscribe to: messages, message_deliveries, message_reads"
+        }
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
