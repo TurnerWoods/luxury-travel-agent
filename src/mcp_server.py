@@ -146,6 +146,28 @@ class MCPServer:
                         }
                     }
                 }
+            },
+            "send_to_whatsapp": {
+                "description": "Send travel options (flights, hotels, restaurants) as interactive cards to WhatsApp",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "phone": {
+                            "type": "string",
+                            "description": "Recipient phone number with country code (e.g., +1234567890)"
+                        },
+                        "item_type": {
+                            "type": "string",
+                            "enum": ["flight", "hotel", "restaurant"],
+                            "description": "Type of item to send"
+                        },
+                        "item": {
+                            "type": "object",
+                            "description": "The travel item data to send"
+                        }
+                    },
+                    "required": ["phone", "item_type", "item"]
+                }
             }
         }
 
@@ -261,6 +283,27 @@ class MCPServer:
                 max_restaurants=arguments.get("max_restaurants", 3)
             )
             return self._format_restaurants({"restaurants": result.get("allRestaurants", []), "count": len(result.get("allRestaurants", []))})
+
+        elif tool_name == "send_to_whatsapp":
+            from tools.whatsapp_sender import (
+                send_flight_to_whatsapp,
+                send_hotel_to_whatsapp,
+                send_restaurant_to_whatsapp
+            )
+            phone = arguments.get("phone")
+            item_type = arguments.get("item_type")
+            item = arguments.get("item")
+
+            if item_type == "flight":
+                result = await send_flight_to_whatsapp(phone, item)
+            elif item_type == "hotel":
+                result = await send_hotel_to_whatsapp(phone, item)
+            elif item_type == "restaurant":
+                result = await send_restaurant_to_whatsapp(phone, item)
+            else:
+                result = {"error": f"Unknown item type: {item_type}"}
+
+            return result
 
         else:
             return {"error": f"Unknown tool: {tool_name}"}
