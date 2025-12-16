@@ -201,64 +201,6 @@ class AmadeusClient:
             return response.json().get("data", [])
 
 
-class KiwiClient:
-    """Kiwi.com Tequila API client for flight searches - great for finding deals"""
-
-    API_URL = "https://api.tequila.kiwi.com"
-
-    # Cabin class mapping (Kiwi uses different values)
-    CABIN_MAP = {
-        "ECONOMY": "M",
-        "PREMIUM_ECONOMY": "W",
-        "BUSINESS": "C",
-        "FIRST": "F"
-    }
-
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-
-    async def search_flights(self, params: FlightSearchParams) -> List[Dict]:
-        """Search for flights via Kiwi Tequila API"""
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Format date as DD/MM/YYYY for Kiwi
-            dep_date = datetime.strptime(params.departure_date, "%Y-%m-%d")
-            date_from = dep_date.strftime("%d/%m/%Y")
-            date_to = date_from  # Same day for specific date search
-
-            query_params = {
-                "fly_from": params.origin,
-                "fly_to": params.destination,
-                "date_from": date_from,
-                "date_to": date_to,
-                "adults": params.adults,
-                "selected_cabins": self.CABIN_MAP.get(params.cabin_class.value, "C"),
-                "curr": "USD",
-                "limit": params.max_results,
-                "sort": "price",
-                "one_for_city": 0,
-                "max_stopovers": 2
-            }
-
-            if params.return_date:
-                ret_date = datetime.strptime(params.return_date, "%Y-%m-%d")
-                query_params["return_from"] = ret_date.strftime("%d/%m/%Y")
-                query_params["return_to"] = ret_date.strftime("%d/%m/%Y")
-                query_params["flight_type"] = "round"
-            else:
-                query_params["flight_type"] = "oneway"
-
-            if params.max_price:
-                query_params["price_to"] = int(params.max_price)
-
-            response = await client.get(
-                f"{self.API_URL}/v2/search",
-                params=query_params,
-                headers={"apikey": self.api_key}
-            )
-            response.raise_for_status()
-            return response.json().get("data", [])
-
-
 class FlightWidget:
     """
     Main Flight Widget Tool
@@ -320,82 +262,40 @@ class FlightWidget:
 
     def __init__(self):
         self.amadeus = None
-        self.kiwi = None
         self._init_clients()
 
     def _init_clients(self):
         """Initialize API clients from environment"""
         amadeus_key = os.getenv("AMADEUS_API_KEY")
         amadeus_secret = os.getenv("AMADEUS_API_SECRET")
-        kiwi_key = os.getenv("KIWI_API_KEY")
 
         if amadeus_key and amadeus_secret:
             self.amadeus = AmadeusClient(amadeus_key, amadeus_secret)
             logger.info("Amadeus client initialized")
 
-        if kiwi_key:
-            self.kiwi = KiwiClient(kiwi_key)
-            logger.info("Kiwi client initialized")
-
     async def search_flights(self, params: FlightSearchParams) -> List[FlightDeal]:
         """
-        Search for flights via multiple APIs (Amadeus, Kiwi)
-        Returns sorted list of deals from all sources
+        Search for flights via Amadeus API
+        Returns sorted list of deals
         """
         deals = []
-        tasks = []
 
         # Search Amadeus
         if self.amadeus:
-            tasks.append(self._search_amadeus(params))
-
-        # Search Kiwi
-        if self.kiwi:
-            tasks.append(self._search_kiwi(params))
-
-        # Run all searches in parallel
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for result in results:
-                if isinstance(result, list):
-                    deals.extend(result)
-                elif isinstance(result, Exception):
-                    logger.error(f"Search failed: {result}")
+            try:
+                results = await self.amadeus.search_flights(params)
+                deals.extend(self._parse_amadeus_results(results, params))
+            except Exception as e:
+                logger.error(f"Amadeus search failed: {e}")
 
         # Fallback to mock data if no API configured or no results
         if not deals:
             deals = self._get_mock_deals(params)
 
-        # Deduplicate by route+airline+price (keep lowest price)
-        seen = {}
-        for deal in deals:
-            key = f"{deal.origin}-{deal.destination}-{deal.airline}"
-            if key not in seen or deal.price < seen[key].price:
-                seen[key] = deal
-        deals = list(seen.values())
-
         # Sort by deal score (highest first), then by price
         deals.sort(key=lambda d: (-d.deal_score, d.price))
 
         return deals[:params.max_results]
-
-    async def _search_amadeus(self, params: FlightSearchParams) -> List[FlightDeal]:
-        """Search Amadeus API"""
-        try:
-            results = await self.amadeus.search_flights(params)
-            return self._parse_amadeus_results(results, params)
-        except Exception as e:
-            logger.error(f"Amadeus search failed: {e}")
-            return []
-
-    async def _search_kiwi(self, params: FlightSearchParams) -> List[FlightDeal]:
-        """Search Kiwi API"""
-        try:
-            results = await self.kiwi.search_flights(params)
-            return self._parse_kiwi_results(results, params)
-        except Exception as e:
-            logger.error(f"Kiwi search failed: {e}")
-            return []
 
     async def get_widget_data(self, user_id: Optional[str] = None, max_deals: int = 3) -> Dict[str, Any]:
         """
@@ -491,77 +391,6 @@ class FlightWidget:
                 deals.append(deal)
             except Exception as e:
                 logger.error(f"Failed to parse Amadeus offer: {e}")
-
-        return deals
-
-    def _parse_kiwi_results(self, results: List[Dict], params: FlightSearchParams) -> List[FlightDeal]:
-        """Parse Kiwi flight results into FlightDeals"""
-        deals = []
-
-        for flight in results:
-            try:
-                price = float(flight.get("price", 0))
-                routes = flight.get("route", [])
-                first_leg = routes[0] if routes else {}
-                last_leg = routes[-1] if routes else first_leg
-
-                # Get airline info
-                airlines = flight.get("airlines", [])
-                airline = airlines[0] if airlines else "XX"
-
-                # Calculate stops (number of route segments - 1 for outbound)
-                # For round trips, count only outbound stops
-                outbound_routes = [r for r in routes if r.get("return") == 0]
-                stops = max(0, len(outbound_routes) - 1)
-
-                # Duration in minutes
-                duration_mins = flight.get("duration", {}).get("total", 0) // 60
-                duration_str = f"{duration_mins // 60}h {duration_mins % 60:02d}m"
-
-                # Parse times
-                dep_time = first_leg.get("local_departure", "")
-                arr_time = last_leg.get("local_arrival", "")
-                if dep_time:
-                    dep_time = dep_time[11:16]  # Extract HH:MM
-                if arr_time:
-                    arr_time = arr_time[11:16]
-
-                # Calculate deal score
-                deal_score = self._calculate_deal_score(price, params.cabin_class, stops)
-                urgency = self._determine_urgency(deal_score, price)
-
-                # Kiwi provides deep links
-                booking_url = flight.get("deep_link", "")
-
-                deal = FlightDeal(
-                    id=f"kiwi_{flight.get('id', '')}",
-                    origin=params.origin,
-                    destination=params.destination,
-                    route_display=f"{params.origin} -> {params.destination}",
-                    price=price,
-                    original_price=price * 1.30 if deal_score >= 7 else None,
-                    currency="USD",
-                    cabin_class=params.cabin_class.value,
-                    airline=airline,
-                    airline_name=self.AIRLINES.get(airline, airline),
-                    departure_date=params.departure_date,
-                    return_date=params.return_date,
-                    departure_time=dep_time,
-                    arrival_time=arr_time,
-                    duration=duration_str,
-                    stops=stops,
-                    deal_score=deal_score,
-                    savings_percent=23 if deal_score >= 7 else None,
-                    urgency=urgency,
-                    expires_at=(datetime.now() + timedelta(hours=8)).isoformat() if deal_score >= 8 else None,
-                    is_mistake_fare=deal_score >= 9,
-                    source="kiwi",
-                    deep_link=self._generate_sms_link(params.origin, params.destination, price),
-                    booking_url=booking_url
-                )
-                deals.append(deal)
-            except Exception as e:
-                logger.error(f"Failed to parse Kiwi flight: {e}")
 
         return deals
 
