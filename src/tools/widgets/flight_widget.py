@@ -138,6 +138,104 @@ class FlightDeal:
         }
 
 
+class DowntownTravelClient:
+    """Downtown Travel (thebestagent.pro) API client for GDS flight searches"""
+
+    def __init__(
+        self,
+        api_url: str,
+        sso_url: str,
+        client_id: str,
+        client_secret: str,
+        username: str,
+        password: str
+    ):
+        self.api_url = api_url.rstrip('/')
+        self.sso_url = sso_url.rstrip('/')
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.username = username
+        self.password = password
+        self._access_token: Optional[str] = None
+        self._token_expiry: Optional[datetime] = None
+
+    async def _get_token(self, client: httpx.AsyncClient) -> str:
+        """Get OAuth token from SSO endpoint"""
+        if self._access_token and self._token_expiry and datetime.now() < self._token_expiry:
+            return self._access_token
+
+        # Try OAuth2 password grant
+        try:
+            response = await client.post(
+                f"{self.sso_url}/oauth/token",
+                data={
+                    "grant_type": "password",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "username": self.username,
+                    "password": self.password,
+                    "scope": "openid profile"
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+            response.raise_for_status()
+            data = response.json()
+            self._access_token = data.get("access_token")
+            expires_in = data.get("expires_in", 3600)
+            self._token_expiry = datetime.now() + timedelta(seconds=expires_in - 60)
+            logger.info("Downtown Travel: OAuth token obtained")
+            return self._access_token
+        except Exception as e:
+            logger.error(f"Downtown Travel auth failed: {e}")
+            raise
+
+    async def search_flights(self, params: 'FlightSearchParams') -> List[Dict]:
+        """Search for flights via Downtown Travel GDS"""
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            token = await self._get_token(client)
+
+            # Common GDS-style search request
+            search_request = {
+                "origin": params.origin,
+                "destination": params.destination,
+                "departureDate": params.departure_date,
+                "adults": params.adults,
+                "cabinClass": params.cabin_class.value,
+                "currency": "USD"
+            }
+
+            if params.return_date:
+                search_request["returnDate"] = params.return_date
+
+            # Try common API endpoint patterns
+            endpoints = [
+                f"{self.api_url}/api/v1/flights/search",
+                f"{self.api_url}/v1/shopping/flight-offers",
+                f"{self.api_url}/flights/search",
+                f"{self.api_url}/api/search",
+            ]
+
+            for endpoint in endpoints:
+                try:
+                    response = await client.post(
+                        endpoint,
+                        json=search_request,
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Content-Type": "application/json"
+                        }
+                    )
+                    if response.status_code == 200:
+                        logger.info(f"Downtown Travel: Found working endpoint {endpoint}")
+                        return response.json().get("data", response.json().get("flights", []))
+                except Exception as e:
+                    logger.debug(f"Downtown Travel endpoint {endpoint} failed: {e}")
+                    continue
+
+            logger.warning("Downtown Travel: No working endpoint found")
+            return []
+
+
 class AmadeusClient:
     """Amadeus API client for flight searches"""
 
@@ -262,40 +360,147 @@ class FlightWidget:
 
     def __init__(self):
         self.amadeus = None
+        self.downtown = None
         self._init_clients()
 
     def _init_clients(self):
         """Initialize API clients from environment"""
+        # Amadeus
         amadeus_key = os.getenv("AMADEUS_API_KEY")
         amadeus_secret = os.getenv("AMADEUS_API_SECRET")
-
         if amadeus_key and amadeus_secret:
             self.amadeus = AmadeusClient(amadeus_key, amadeus_secret)
             logger.info("Amadeus client initialized")
 
+        # Downtown Travel (thebestagent.pro)
+        downtown_api = os.getenv("DOWNTOWN_TRAVEL_API_URL")
+        downtown_sso = os.getenv("DOWNTOWN_TRAVEL_SSO_URL")
+        downtown_client_id = os.getenv("DOWNTOWN_TRAVEL_CLIENT_ID")
+        downtown_client_secret = os.getenv("DOWNTOWN_TRAVEL_CLIENT_SECRET")
+        downtown_username = os.getenv("DOWNTOWN_TRAVEL_USERNAME")
+        downtown_password = os.getenv("DOWNTOWN_TRAVEL_PASSWORD")
+
+        if all([downtown_api, downtown_sso, downtown_client_id, downtown_client_secret, downtown_username, downtown_password]):
+            self.downtown = DowntownTravelClient(
+                api_url=downtown_api,
+                sso_url=downtown_sso,
+                client_id=downtown_client_id,
+                client_secret=downtown_client_secret,
+                username=downtown_username,
+                password=downtown_password
+            )
+            logger.info("Downtown Travel client initialized")
+
     async def search_flights(self, params: FlightSearchParams) -> List[FlightDeal]:
         """
-        Search for flights via Amadeus API
-        Returns sorted list of deals
+        Search for flights via multiple APIs (Amadeus, Downtown Travel)
+        Returns sorted list of deals from all sources
         """
         deals = []
+        tasks = []
 
         # Search Amadeus
         if self.amadeus:
-            try:
-                results = await self.amadeus.search_flights(params)
-                deals.extend(self._parse_amadeus_results(results, params))
-            except Exception as e:
-                logger.error(f"Amadeus search failed: {e}")
+            tasks.append(self._search_amadeus(params))
+
+        # Search Downtown Travel
+        if self.downtown:
+            tasks.append(self._search_downtown(params))
+
+        # Run all searches in parallel
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, list):
+                    deals.extend(result)
+                elif isinstance(result, Exception):
+                    logger.error(f"Search failed: {result}")
 
         # Fallback to mock data if no API configured or no results
         if not deals:
             deals = self._get_mock_deals(params)
 
+        # Deduplicate by route+airline (keep best deal score)
+        seen = {}
+        for deal in deals:
+            key = f"{deal.origin}-{deal.destination}-{deal.airline}"
+            if key not in seen or deal.deal_score > seen[key].deal_score:
+                seen[key] = deal
+        deals = list(seen.values())
+
         # Sort by deal score (highest first), then by price
         deals.sort(key=lambda d: (-d.deal_score, d.price))
 
         return deals[:params.max_results]
+
+    async def _search_amadeus(self, params: FlightSearchParams) -> List[FlightDeal]:
+        """Search Amadeus API"""
+        try:
+            results = await self.amadeus.search_flights(params)
+            return self._parse_amadeus_results(results, params)
+        except Exception as e:
+            logger.error(f"Amadeus search failed: {e}")
+            return []
+
+    async def _search_downtown(self, params: FlightSearchParams) -> List[FlightDeal]:
+        """Search Downtown Travel API"""
+        try:
+            results = await self.downtown.search_flights(params)
+            return self._parse_downtown_results(results, params)
+        except Exception as e:
+            logger.error(f"Downtown Travel search failed: {e}")
+            return []
+
+    def _parse_downtown_results(self, results: List[Dict], params: FlightSearchParams) -> List[FlightDeal]:
+        """Parse Downtown Travel results into FlightDeals"""
+        deals = []
+
+        for offer in results:
+            try:
+                # Parse based on common GDS response structures
+                price = float(offer.get("price", offer.get("totalPrice", offer.get("fare", {}).get("total", 0))))
+
+                # Try to get flight details
+                segments = offer.get("segments", offer.get("itinerary", {}).get("segments", []))
+                first_segment = segments[0] if segments else offer
+                last_segment = segments[-1] if segments else first_segment
+
+                airline = offer.get("airline", offer.get("carrierCode", first_segment.get("carrier", "XX")))
+
+                deal_score = self._calculate_deal_score(price, params.cabin_class, len(segments) - 1 if segments else 0)
+                urgency = self._determine_urgency(deal_score, price)
+
+                deal = FlightDeal(
+                    id=f"downtown_{offer.get('id', offer.get('offerId', ''))}",
+                    origin=params.origin,
+                    destination=params.destination,
+                    route_display=f"{params.origin} -> {params.destination}",
+                    price=price,
+                    original_price=price * 1.25 if deal_score >= 7 else None,
+                    currency="USD",
+                    cabin_class=params.cabin_class.value,
+                    airline=airline,
+                    airline_name=self.AIRLINES.get(airline, airline),
+                    departure_date=params.departure_date,
+                    return_date=params.return_date,
+                    departure_time=first_segment.get("departureTime", first_segment.get("departure", {}).get("time", ""))[:5],
+                    arrival_time=last_segment.get("arrivalTime", last_segment.get("arrival", {}).get("time", ""))[:5],
+                    duration=offer.get("duration", offer.get("totalDuration", "")),
+                    stops=len(segments) - 1 if segments else 0,
+                    deal_score=deal_score,
+                    savings_percent=20 if deal_score >= 7 else None,
+                    urgency=urgency,
+                    expires_at=None,
+                    is_mistake_fare=False,
+                    source="downtown",
+                    deep_link=self._generate_sms_link(params.origin, params.destination, price),
+                    booking_url=offer.get("bookingUrl")
+                )
+                deals.append(deal)
+            except Exception as e:
+                logger.error(f"Failed to parse Downtown Travel offer: {e}")
+
+        return deals
 
     async def get_widget_data(self, user_id: Optional[str] = None, max_deals: int = 3) -> Dict[str, Any]:
         """

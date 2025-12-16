@@ -5,6 +5,10 @@ Luxury Travel Agent - FastAPI Development Server
 import os
 import sys
 from contextlib import asynccontextmanager
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
