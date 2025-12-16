@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Write(./data/production/**)",
+      "Bash(rm -rf *)",
+      "Bash(sudo *)"
+    ],
+    "allowedTools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "WebSearch",
+      "WebFetch",
+      "Grep",
+      "Glob"
+    ],
+    "permissionMode": "confirm"
+  },
+  "hooks": {
+    "preRead": [],
+    "postWrite": [
+      {
+        "command": "black {file}",
+        "description": "Auto-format Python files with Black",
+        "matcher": {
+          "tool": "Write",
+          "pathPattern": "**/*.py"
+        }
+      }
+    ],
+    "preToolUse": []
+  },
+  "environment": {
+    "ANTHROPIC_MODEL": "claude-sonnet-4-5-20250929",
+    "PYTHON_ENV": "development",
+    "LOG_LEVEL": "info"
+  },
+  "spinnerTipsEnabled": false,
+  "compactEnabled": true
+}

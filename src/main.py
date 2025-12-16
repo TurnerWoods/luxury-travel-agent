@@ -1,0 +1,302 @@
+"""
+Luxury Travel Agent - FastAPI Development Server
+"""
+
+import os
+import sys
+from contextlib import asynccontextmanager
+from typing import Optional
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+# Templates directory
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Add src to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from tools.widgets.flight_widget import (
+    FlightWidget, FlightSearchParams, CabinClass,
+    search_flights_tool, get_flight_widget_data_tool
+)
+from tools.widgets.hotel_widget import (
+    HotelWidget, HotelSearchParams, HotelCategory,
+    search_hotels_tool, get_hotel_widget_data_tool
+)
+from tools.widgets.restaurant_widget import (
+    RestaurantWidget, RestaurantSearchParams, CuisineType,
+    search_restaurants_tool, get_restaurant_widget_data_tool
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler"""
+    print("Starting Luxury Travel Agent API...")
+    yield
+    print("Shutting down...")
+
+
+app = FastAPI(
+    title="Luxury Travel Agent API",
+    description="API for luxury travel search widgets - flights, hotels, and packages",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Request Models
+class FlightSearchRequest(BaseModel):
+    origin: str
+    destination: str
+    departure_date: str
+    return_date: Optional[str] = None
+    adults: int = 1
+    cabin_class: str = "BUSINESS"
+    max_results: int = 10
+
+
+class HotelSearchRequest(BaseModel):
+    location: str
+    check_in: str
+    check_out: str
+    guests: int = 2
+    rooms: int = 1
+    min_rating: float = 4.0
+    max_price: Optional[float] = None
+    category: str = "luxury"
+
+
+class RestaurantSearchRequest(BaseModel):
+    location: str
+    date: str
+    time: str = "19:00"
+    party_size: int = 2
+    cuisine: str = "all"
+
+
+# Routes
+@app.get("/")
+async def root():
+    """API root - health check"""
+    return {
+        "status": "ok",
+        "service": "Luxury Travel Agent API",
+        "version": "1.0.0",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+
+# Flight endpoints
+@app.post("/api/flights/search")
+async def search_flights(request: FlightSearchRequest):
+    """Search for flights"""
+    try:
+        result = await search_flights_tool(
+            origin=request.origin,
+            destination=request.destination,
+            departure_date=request.departure_date,
+            return_date=request.return_date,
+            adults=request.adults,
+            cabin_class=request.cabin_class,
+            max_results=request.max_results
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/flights/widget")
+async def get_flight_widget(user_id: Optional[str] = None, max_deals: int = 3):
+    """Get flight widget data for iOS"""
+    try:
+        result = await get_flight_widget_data_tool(user_id, max_deals)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Hotel endpoints
+@app.post("/api/hotels/search")
+async def search_hotels(request: HotelSearchRequest):
+    """Search for hotels"""
+    try:
+        result = await search_hotels_tool(
+            location=request.location,
+            check_in=request.check_in,
+            check_out=request.check_out,
+            guests=request.guests,
+            rooms=request.rooms,
+            min_rating=request.min_rating,
+            max_price=request.max_price,
+            category=request.category
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/hotels/widget")
+async def get_hotel_widget(user_id: Optional[str] = None, max_hotels: int = 3):
+    """Get hotel widget data for iOS"""
+    try:
+        result = await get_hotel_widget_data_tool(user_id, max_hotels)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/hotels/curated")
+async def get_curated_hotels(location: str, category: str = "luxury"):
+    """Get curated luxury hotels for a location"""
+    # Mock curated hotels for demo
+    return {
+        "hotels": [
+            {
+                "id": "curated_1",
+                "name": "Four Seasons Hotel",
+                "brand": "Four Seasons",
+                "location": location,
+                "city": location,
+                "rating": 4.9,
+                "reviewCount": 2500,
+                "price": 850,
+                "category": category,
+                "stars": 5,
+                "imageUrl": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
+                "amenities": ["Spa", "Pool", "Restaurant", "Butler Service"],
+                "highlights": ["Award-winning", "City Center"]
+            }
+        ]
+    }
+
+
+# Restaurant endpoints
+@app.post("/api/restaurants/search")
+async def search_restaurants(request: RestaurantSearchRequest):
+    """Search for restaurants"""
+    try:
+        result = await search_restaurants_tool(
+            location=request.location,
+            date=request.date,
+            time=request.time,
+            party_size=request.party_size,
+            cuisine=request.cuisine
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/restaurants/widget")
+async def get_restaurant_widget(location: Optional[str] = None, max_restaurants: int = 3):
+    """Get restaurant widget data for iOS"""
+    try:
+        result = await get_restaurant_widget_data_tool(location, max_restaurants)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Widget-specific endpoints
+@app.get("/api/widget/margaux")
+async def get_margaux_widget_data(user_id: Optional[str] = None):
+    """Get Margaux (flight deals) widget data"""
+    return await get_flight_widget(user_id, max_deals=3)
+
+
+@app.get("/api/widget/felix")
+async def get_felix_widget_data(user_id: Optional[str] = None):
+    """Get Felix (trip planner) widget data - placeholder"""
+    return {
+        "widgetType": "felix_trip_planner",
+        "size": "medium_2x2",
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "today": {
+            "activities": [
+                {"time": "10:00 AM", "name": "Hotel Checkout", "status": "confirmed", "icon": "check"},
+                {"time": "2:00 PM", "name": "Wine Tasting Tour", "status": "pending", "icon": "clock"}
+            ],
+            "meals": [
+                {"time": "7:00 PM", "name": "Michelin Dinner", "venue": "Le Bernardin", "icon": "utensils"}
+            ],
+            "groupStatus": {"text": "3/5 confirmed", "confirmed": 3, "total": 5, "percentage": 60}
+        },
+        "nextActivity": {
+            "time": "2:00 PM",
+            "name": "Wine Tasting Tour",
+            "countdown": "4h 15m",
+            "action": "confirm"
+        },
+        "lastUpdated": datetime.now().isoformat()
+    }
+
+
+# Widget Preview UI
+@app.get("/preview", response_class=HTMLResponse)
+async def widget_preview():
+    """Beautiful widget preview page"""
+    template_path = TEMPLATES_DIR / "widget_preview.html"
+    if template_path.exists():
+        return HTMLResponse(content=template_path.read_text())
+    raise HTTPException(status_code=404, detail="Preview template not found")
+
+
+@app.get("/logo")
+async def get_logo():
+    """Serve the logo file"""
+    # Check common logo locations
+    logo_paths = [
+        Path(__file__).parent / "static" / "logo.png",
+        Path(__file__).parent / "static" / "logo.svg",
+        Path(__file__).parent.parent / "assets" / "logo.png",
+        Path(__file__).parent.parent / "logo.png",
+    ]
+
+    for logo_path in logo_paths:
+        if logo_path.exists():
+            media_type = "image/svg+xml" if logo_path.suffix == ".svg" else "image/png"
+            return FileResponse(logo_path, media_type=media_type)
+
+    raise HTTPException(status_code=404, detail="Logo not found")
+
+
+@app.get("/preview/flights", response_class=HTMLResponse)
+async def flights_preview():
+    """Flight cards preview"""
+    return HTMLResponse(content="""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flight Cards Preview</title>
+    <script>window.location.href = '/preview';</script>
+</head>
+<body>Redirecting...</body>
+</html>
+    """)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

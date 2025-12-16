@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "travel-api": {
+      "command": "python",
+      "args": ["-m", "src.tools.travel_api_server"],
+      "env": {
+        "API_KEY": "${TRAVEL_API_KEY}"
+      }
+    },
+    "database": {
+      "command": "python",
+      "args": ["-m", "src.tools.database_server"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    }
+  }
+}
