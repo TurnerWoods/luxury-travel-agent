@@ -257,16 +257,21 @@ class HotelWidget:
         "One&Only", "Six Senses", "Belmond", "Bulgari"
     ]
 
-    # Stock images for different locations
+    # Stock images for different locations (luxury hotel interiors and exteriors)
     HOTEL_IMAGES = {
-        "paris": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800",
-        "tokyo": "https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=800",
-        "dubai": "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=800",
-        "maldives": "https://images.unsplash.com/photo-1514282401047-d79a71a590e8?w=800",
+        "paris": "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800",
+        "tokyo": "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800",
+        "dubai": "https://images.unsplash.com/photo-1582719508461-905c673771fd?w=800",
+        "maldives": "https://images.unsplash.com/photo-1439130490301-25e322d88054?w=800",
         "bali": "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800",
-        "miami": "https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?w=800",
-        "london": "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800",
-        "new york": "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800",
+        "miami": "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=800",
+        "london": "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=800",
+        "new york": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800",
+        "whistler": "https://images.unsplash.com/photo-1548802673-380ab8ebc7b7?w=800",
+        "vancouver": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
+        "aspen": "https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=800",
+        "santorini": "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800",
+        "amalfi": "https://images.unsplash.com/photo-1602002418082-a4443e081dd1?w=800",
         "default": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"
     }
 
@@ -549,18 +554,66 @@ class HotelWidget:
                 {"name": "One&Only Reethi Rah", "brand": "One&Only", "price": 2200, "rating": 4.9},
                 {"name": "Cheval Blanc Randheli", "brand": "LVMH", "price": 3000, "rating": 4.9},
             ],
+            "whistler": [
+                {"name": "Four Seasons Resort Whistler", "brand": "Four Seasons", "price": 895, "rating": 4.9},
+                {"name": "Fairmont Chateau Whistler", "brand": "Fairmont", "price": 650, "rating": 4.8},
+                {"name": "Nita Lake Lodge", "brand": "Nita Lake", "price": 450, "rating": 4.7},
+            ],
+            "vancouver": [
+                {"name": "Fairmont Pacific Rim", "brand": "Fairmont", "price": 650, "rating": 4.9},
+                {"name": "Rosewood Hotel Georgia", "brand": "Rosewood", "price": 550, "rating": 4.8},
+                {"name": "Shangri-La Vancouver", "brand": "Shangri-La", "price": 480, "rating": 4.8},
+            ],
+            "aspen": [
+                {"name": "The Little Nell", "brand": "The Little Nell", "price": 1200, "rating": 4.9},
+                {"name": "St. Regis Aspen Resort", "brand": "St. Regis", "price": 1100, "rating": 4.9},
+                {"name": "The Limelight Hotel", "brand": "Limelight", "price": 650, "rating": 4.7},
+            ],
+            "bali": [
+                {"name": "Aman Villas at Nusa Dua", "brand": "Aman", "price": 1500, "rating": 4.9},
+                {"name": "Four Seasons Resort Bali", "brand": "Four Seasons", "price": 950, "rating": 4.9},
+                {"name": "Bulgari Resort Bali", "brand": "Bulgari", "price": 1200, "rating": 4.8},
+            ],
+            "santorini": [
+                {"name": "Canaves Oia Epitome", "brand": "Canaves", "price": 1100, "rating": 4.9},
+                {"name": "Mystique Santorini", "brand": "Luxury Collection", "price": 950, "rating": 4.8},
+                {"name": "Grace Hotel Santorini", "brand": "Auberge", "price": 850, "rating": 4.8},
+            ],
+            "amalfi": [
+                {"name": "Belmond Hotel Caruso", "brand": "Belmond", "price": 1200, "rating": 4.9},
+                {"name": "Il San Pietro di Positano", "brand": "Independent", "price": 1100, "rating": 4.9},
+                {"name": "Le Sirenuse", "brand": "Independent", "price": 950, "rating": 4.8},
+            ],
         }
 
-        location_lower = params.location.lower()
+        location_lower = params.location.lower().strip()
         # Map IATA codes to city names
-        code_map = {"mia": "miami", "par": "paris", "tyo": "tokyo", "dxb": "dubai",
-                    "lon": "london", "nyc": "new york", "mle": "maldives", "lhr": "london"}
+        code_map = {
+            "mia": "miami", "par": "paris", "tyo": "tokyo", "dxb": "dubai",
+            "lon": "london", "nyc": "new york", "mle": "maldives", "lhr": "london",
+            "yvr": "vancouver", "yws": "whistler", "dps": "bali", "jtr": "santorini",
+            "nap": "amalfi", "ase": "aspen", "cdg": "paris", "hnd": "tokyo",
+            "nrt": "tokyo", "jfk": "new york", "lax": "los angeles", "sfo": "san francisco"
+        }
 
         if location_lower in code_map:
             location_lower = code_map[location_lower]
 
-        hotels_data = mock_data.get(location_lower, mock_data["paris"])
+        # Try to find hotels for this location, generate generic if not found
+        hotels_data = mock_data.get(location_lower)
+
+        # If no specific data, generate generic luxury hotels for the location
+        if not hotels_data:
+            display_name = params.location.title()
+            hotels_data = [
+                {"name": f"Four Seasons {display_name}", "brand": "Four Seasons", "price": 895, "rating": 4.9},
+                {"name": f"Ritz-Carlton {display_name}", "brand": "Ritz-Carlton", "price": 750, "rating": 4.8},
+                {"name": f"St. Regis {display_name}", "brand": "St. Regis", "price": 850, "rating": 4.8},
+            ]
         nights = self._calculate_nights(params.check_in, params.check_out)
+
+        # Use resolved location name for display
+        display_city = location_lower.title() if location_lower in mock_data else params.location.title()
 
         results = []
         for idx, data in enumerate(hotels_data):
@@ -568,8 +621,8 @@ class HotelWidget:
                 id=f"amadeus_{location_lower}_{idx}",
                 name=data["name"],
                 brand=data["brand"],
-                location=f"{params.location.title()} City Center",
-                city=params.location.title(),
+                location=display_city,
+                city=display_city,
                 country="",
                 rating=data["rating"],
                 review_count=int(data["rating"] * 500),
