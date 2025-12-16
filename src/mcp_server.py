@@ -205,14 +205,26 @@ class MCPServer:
             arguments = params.get("arguments", {})
 
             result = await self._call_tool(tool_name, arguments)
-            return self._response(request_id, {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": json.dumps(result, indent=2)
-                    }
-                ]
+
+            # Build content with images for travel searches
+            content = []
+
+            # Add images if available in results
+            images = result.get("images", [])
+            for img in images[:3]:  # Limit to 3 images
+                content.append({
+                    "type": "image",
+                    "data": img.get("url", ""),
+                    "mimeType": "image/jpeg"
+                })
+
+            # Add text result
+            content.append({
+                "type": "text",
+                "text": json.dumps(result, indent=2)
             })
+
+            return self._response(request_id, {"content": content})
 
         elif method == "notifications/initialized":
             return None  # No response needed for notifications
@@ -312,9 +324,10 @@ class MCPServer:
         """Format flight results as structured data for display."""
         deals = result.get("deals", [])
         if not deals:
-            return {"formatted": "No flights found.", "raw": result}
+            return {"formatted": "No flights found.", "raw": result, "images": []}
 
         flights = []
+        images = []
         for deal in deals:
             flight = {
                 "airline": deal.get("airlineName", ""),
@@ -328,23 +341,28 @@ class MCPServer:
                 "original_price": deal.get("originalPrice", ""),
                 "savings": deal.get("savings", ""),
                 "deal_score": deal.get("dealScore", 0),
-                "urgency": deal.get("urgency", "")
+                "urgency": deal.get("urgency", ""),
+                "image_url": deal.get("imageUrl", "")
             }
             flights.append(flight)
+            if deal.get("imageUrl"):
+                images.append({"url": deal.get("imageUrl"), "caption": f"{flight['airline']} - {flight['route']}"})
 
         return {
             "type": "flight_results",
             "count": len(flights),
-            "flights": flights
+            "flights": flights,
+            "images": images[:3]
         }
 
     def _format_hotels(self, result: dict) -> dict:
         """Format hotel results as structured data for display."""
         hotels_data = result.get("hotels", [])
         if not hotels_data:
-            return {"formatted": "No hotels found.", "raw": result}
+            return {"formatted": "No hotels found.", "raw": result, "images": []}
 
         hotels = []
+        images = []
         for h in hotels_data:
             hotel = {
                 "name": h.get("name", ""),
@@ -362,20 +380,24 @@ class MCPServer:
                 "image_url": h.get("imageUrl", "")
             }
             hotels.append(hotel)
+            if h.get("imageUrl"):
+                images.append({"url": h.get("imageUrl"), "caption": f"{hotel['name']} - {hotel['location']}"})
 
         return {
             "type": "hotel_results",
             "count": len(hotels),
-            "hotels": hotels
+            "hotels": hotels,
+            "images": images[:3]
         }
 
     def _format_restaurants(self, result: dict) -> dict:
         """Format restaurant results as structured data for display."""
         restaurants_data = result.get("restaurants", [])
         if not restaurants_data:
-            return {"formatted": "No restaurants found.", "raw": result}
+            return {"formatted": "No restaurants found.", "raw": result, "images": []}
 
         restaurants = []
+        images = []
         for r in restaurants_data:
             restaurant = {
                 "name": r.get("name", ""),
@@ -393,11 +415,15 @@ class MCPServer:
                 "image_url": r.get("imageUrl", "")
             }
             restaurants.append(restaurant)
+            if r.get("imageUrl"):
+                michelin = f" ({r.get('michelinStars', 0)}★ Michelin)" if r.get("michelinStars", 0) > 0 else ""
+                images.append({"url": r.get("imageUrl"), "caption": f"{restaurant['name']}{michelin}"})
 
         return {
             "type": "restaurant_results",
             "count": len(restaurants),
-            "restaurants": restaurants
+            "restaurants": restaurants,
+            "images": images[:3]
         }
 
     def _response(self, request_id: Any, result: dict) -> dict:
