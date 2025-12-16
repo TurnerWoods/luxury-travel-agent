@@ -1372,37 +1372,82 @@
             }
         }
 
-        // Load travel cards from API
+        // Destination code mapping
+        const destinationCodes = {
+            'Paris': { code: 'CDG', country: 'France' },
+            'London': { code: 'LHR', country: 'United Kingdom' },
+            'Tokyo': { code: 'NRT', country: 'Japan' },
+            'Miami': { code: 'MIA', country: 'Florida' }
+        };
+
+        // Load travel cards from API based on selected destination
         async function loadTravelCards() {
-            // Load flights
+            const dest = destinationCodes[selectedDestination] || destinationCodes['London'];
+            const checkInDate = document.getElementById('checkIn').value;
+            const checkOutDate = document.getElementById('checkOut').value;
+
+            // Load flights for selected destination
             try {
-                const flightsRes = await fetch('/api/flights/widget');
+                const flightsRes = await fetch(`/api/flights/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        origin: 'JFK',
+                        destination: dest.code,
+                        departure_date: checkInDate,
+                        return_date: checkOutDate,
+                        cabin_class: 'BUSINESS',
+                        max_results: 4
+                    })
+                });
                 const flightsData = await flightsRes.json();
-                renderFlightCards(flightsData.allDeals || []);
+                renderFlightCards(flightsData.deals || getMockFlights());
             } catch (e) {
-                console.log('Using mock flight data');
+                console.log('Using mock flight data for', selectedDestination);
                 renderFlightCards(getMockFlights());
             }
 
-            // Load hotels
+            // Load hotels for selected destination
             try {
-                const hotelsRes = await fetch('/api/hotels/widget');
+                const hotelsRes = await fetch(`/api/hotels/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        location: selectedDestination,
+                        check_in: checkInDate,
+                        check_out: checkOutDate,
+                        guests: 2,
+                        category: 'luxury'
+                    })
+                });
                 const hotelsData = await hotelsRes.json();
-                renderHotelCards(hotelsData.allHotels || []);
+                renderHotelCards(hotelsData.hotels || getMockHotels());
             } catch (e) {
-                console.log('Using mock hotel data');
+                console.log('Using mock hotel data for', selectedDestination);
                 renderHotelCards(getMockHotels());
             }
 
-            // Load restaurants
+            // Load restaurants for selected destination
             try {
-                const restaurantsRes = await fetch('/api/restaurants/widget');
+                const restaurantsRes = await fetch(`/api/restaurants/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        location: selectedDestination,
+                        date: checkInDate,
+                        time: '19:00',
+                        party_size: 2
+                    })
+                });
                 const restaurantsData = await restaurantsRes.json();
-                renderRestaurantCards(restaurantsData.allRestaurants || []);
+                renderRestaurantCards(restaurantsData.restaurants || getMockRestaurants());
             } catch (e) {
-                console.log('Using mock restaurant data');
+                console.log('Using mock restaurant data for', selectedDestination);
                 renderRestaurantCards(getMockRestaurants());
             }
+
+            // Update transportation for destination
+            updateTransportation();
         }
 
         // Render flight cards
@@ -1485,29 +1530,128 @@
             `).join('');
         }
 
-        // Mock data fallbacks
+        // Mock data fallbacks - destination specific with matching images
+        const mockFlightsData = {
+            'Paris': [
+                { route: 'JFK → CDG', airlineName: 'Air France', cabin: 'Business', duration: '7h 25m', stopsDisplay: 'Nonstop', price: '$2,450', imageUrl: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=400' },
+                { route: 'JFK → CDG', airlineName: 'Delta One', cabin: 'Business', duration: '7h 40m', stopsDisplay: 'Nonstop', price: '$2,680', imageUrl: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400' },
+                { route: 'JFK → CDG', airlineName: 'La Compagnie', cabin: 'First Class', duration: '7h 15m', stopsDisplay: 'Nonstop', price: '$4,200', imageUrl: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=400' }
+            ],
+            'London': [
+                { route: 'JFK → LHR', airlineName: 'British Airways', cabin: 'Business', duration: '7h 00m', stopsDisplay: 'Nonstop', price: '$2,150', imageUrl: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=400' },
+                { route: 'JFK → LHR', airlineName: 'Virgin Atlantic', cabin: 'First Class', duration: '7h 15m', stopsDisplay: 'Nonstop', price: '$4,800', imageUrl: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=400' },
+                { route: 'JFK → LHR', airlineName: 'Delta One', cabin: 'Business', duration: '7h 30m', stopsDisplay: 'Nonstop', price: '$2,450', imageUrl: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400' }
+            ],
+            'Tokyo': [
+                { route: 'JFK → NRT', airlineName: 'Japan Airlines', cabin: 'Business', duration: '14h 05m', stopsDisplay: 'Nonstop', price: '$5,200', imageUrl: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=400' },
+                { route: 'JFK → HND', airlineName: 'ANA', cabin: 'First Class', duration: '14h 30m', stopsDisplay: 'Nonstop', price: '$8,900', imageUrl: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=400' },
+                { route: 'JFK → NRT', airlineName: 'Delta One', cabin: 'Business', duration: '14h 15m', stopsDisplay: 'Nonstop', price: '$4,850', imageUrl: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400' }
+            ],
+            'Miami': [
+                { route: 'JFK → MIA', airlineName: 'American Airlines', cabin: 'First Class', duration: '3h 15m', stopsDisplay: 'Nonstop', price: '$890', imageUrl: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=400' },
+                { route: 'JFK → MIA', airlineName: 'JetBlue Mint', cabin: 'Business', duration: '3h 20m', stopsDisplay: 'Nonstop', price: '$650', imageUrl: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=400' },
+                { route: 'JFK → MIA', airlineName: 'Delta One', cabin: 'Business', duration: '3h 25m', stopsDisplay: 'Nonstop', price: '$720', imageUrl: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400' }
+            ]
+        };
+
+        const mockHotelsData = {
+            'Paris': [
+                { name: 'Le Bristol Paris', city: 'Paris', rating: 4.9, stars: 5, pricePerNight: '$1,200', amenities: ['Spa', 'Pool', 'Epicure'], imageUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=400' },
+                { name: 'Hôtel Plaza Athénée', city: 'Paris', rating: 4.9, stars: 5, pricePerNight: '$1,450', amenities: ['Dior Spa', 'Alain Ducasse'], imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400' },
+                { name: 'The Ritz Paris', city: 'Paris', rating: 4.8, stars: 5, pricePerNight: '$1,800', amenities: ['Chanel Spa', 'Bar Hemingway'], imageUrl: 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400' }
+            ],
+            'London': [
+                { name: 'Browns Hotel', city: 'London', rating: 4.9, stars: 5, pricePerNight: '$850', amenities: ['Spa', 'Restaurant', 'Butler'], imageUrl: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=400' },
+                { name: 'The Connaught', city: 'London', rating: 4.9, stars: 5, pricePerNight: '$950', amenities: ['Aman Spa', 'Hélène Darroze'], imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400' },
+                { name: "Claridge's", city: 'London', rating: 4.8, stars: 5, pricePerNight: '$1,100', amenities: ['Art Deco', 'Davies & Brook'], imageUrl: 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400' }
+            ],
+            'Tokyo': [
+                { name: 'Aman Tokyo', city: 'Tokyo', rating: 4.9, stars: 5, pricePerNight: '$1,400', amenities: ['Spa', 'Pool', 'City Views'], imageUrl: 'https://images.unsplash.com/photo-1590073242678-70ee3fc28f8e?w=400' },
+                { name: 'Park Hyatt Tokyo', city: 'Tokyo', rating: 4.8, stars: 5, pricePerNight: '$850', amenities: ['New York Bar', 'Pool', 'Spa'], imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400' },
+                { name: 'The Peninsula Tokyo', city: 'Tokyo', rating: 4.9, stars: 5, pricePerNight: '$950', amenities: ['Spa', 'Peter Restaurant'], imageUrl: 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400' }
+            ],
+            'Miami': [
+                { name: 'Faena Miami Beach', city: 'Miami', rating: 4.8, stars: 5, pricePerNight: '$950', amenities: ['Beach', 'Spa', 'Pool'], imageUrl: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=400' },
+                { name: 'The Setai', city: 'Miami', rating: 4.9, stars: 5, pricePerNight: '$1,100', amenities: ['3 Pools', 'Spa', 'Asian'], imageUrl: 'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=400' },
+                { name: 'Four Seasons Surf Club', city: 'Miami', rating: 4.9, stars: 5, pricePerNight: '$1,200', amenities: ['Beach', 'Le Sirenuse'], imageUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=400' }
+            ]
+        };
+
+        const mockRestaurantsData = {
+            'Paris': [
+                { name: 'Le Cinq', cuisineDisplay: 'French', priceRange: '$$$$', rating: 4.9, michelinStars: 3, availableTimes: ['7:00 PM', '8:30 PM'], imageUrl: 'https://images.unsplash.com/photo-1550966871-3ed3cdb51f3a?w=400' },
+                { name: "L'Ambroisie", cuisineDisplay: 'French', priceRange: '$$$$', rating: 4.9, michelinStars: 3, availableTimes: ['7:30 PM', '9:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=400' },
+                { name: 'Septime', cuisineDisplay: 'Modern French', priceRange: '$$$', rating: 4.7, michelinStars: 1, availableTimes: ['7:00 PM', '9:30 PM'], imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400' }
+            ],
+            'London': [
+                { name: 'Sketch', cuisineDisplay: 'Modern British', priceRange: '$$$$', rating: 4.8, michelinStars: 2, availableTimes: ['7:00 PM', '8:30 PM', '9:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1550966871-3ed3cdb51f3a?w=400' },
+                { name: 'Core by Clare Smyth', cuisineDisplay: 'British', priceRange: '$$$$', rating: 4.9, michelinStars: 3, availableTimes: ['6:30 PM', '8:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=400' },
+                { name: 'The Ledbury', cuisineDisplay: 'Modern European', priceRange: '$$$$', rating: 4.9, michelinStars: 2, availableTimes: ['7:00 PM', '9:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400' }
+            ],
+            'Tokyo': [
+                { name: 'Sukiyabashi Jiro', cuisineDisplay: 'Sushi Omakase', priceRange: '$$$$', rating: 4.9, michelinStars: 3, availableTimes: ['5:30 PM', '8:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=400' },
+                { name: 'Narisawa', cuisineDisplay: 'Innovative', priceRange: '$$$$', rating: 4.9, michelinStars: 2, availableTimes: ['6:00 PM', '8:30 PM'], imageUrl: 'https://images.unsplash.com/photo-1553621042-f6e147245754?w=400' },
+                { name: 'Den', cuisineDisplay: 'Japanese', priceRange: '$$$$', rating: 4.8, michelinStars: 2, availableTimes: ['6:30 PM', '9:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1580822184713-fc5400e7fe10?w=400' }
+            ],
+            'Miami': [
+                { name: 'Zuma Miami', cuisineDisplay: 'Japanese', priceRange: '$$$$', rating: 4.7, michelinStars: 0, availableTimes: ['7:00 PM', '8:30 PM', '9:30 PM'], imageUrl: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=400' },
+                { name: 'Carbone', cuisineDisplay: 'Italian-American', priceRange: '$$$$', rating: 4.8, michelinStars: 0, availableTimes: ['7:00 PM', '9:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400' },
+                { name: 'Stubborn Seed', cuisineDisplay: 'New American', priceRange: '$$$$', rating: 4.7, michelinStars: 1, availableTimes: ['6:30 PM', '8:00 PM', '9:30 PM'], imageUrl: 'https://images.unsplash.com/photo-1550966871-3ed3cdb51f3a?w=400' }
+            ]
+        };
+
         function getMockFlights() {
-            return [
-                { route: 'JFK → LHR', airlineName: 'British Airways', cabin: 'Business', duration: '7h 00m', stopsDisplay: 'Nonstop', price: '$2,150', imageUrl: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400' },
-                { route: 'JFK → LHR', airlineName: 'Virgin Atlantic', cabin: 'First Class', duration: '7h 15m', stopsDisplay: 'Nonstop', price: '$4,800', imageUrl: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=400' },
-                { route: 'JFK → LHR', airlineName: 'Delta One', cabin: 'Business', duration: '7h 30m', stopsDisplay: 'Nonstop', price: '$2,450', imageUrl: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=400' }
-            ];
+            return mockFlightsData[selectedDestination] || mockFlightsData['London'];
         }
 
         function getMockHotels() {
-            return [
-                { name: 'Browns Hotel Mayfair', city: 'London', rating: 4.9, stars: 5, pricePerNight: '$850', amenities: ['Spa', 'Restaurant', 'Butler'], imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400' },
-                { name: "Henry's Townhouse", city: 'London', rating: 4.8, stars: 5, pricePerNight: '$720', amenities: ['Garden', 'Tea Room'], imageUrl: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=400' },
-                { name: 'The Connaught', city: 'London', rating: 4.9, stars: 5, pricePerNight: '$950', amenities: ['Spa', 'Bar', 'Restaurant'], imageUrl: 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400' }
-            ];
+            return mockHotelsData[selectedDestination] || mockHotelsData['London'];
         }
 
         function getMockRestaurants() {
-            return [
-                { name: 'Sketch', cuisineDisplay: 'Modern British', priceRange: '$$$$', rating: 4.8, michelinStars: 2, availableTimes: ['7:00 PM', '8:30 PM', '9:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400' },
-                { name: 'Core by Clare Smyth', cuisineDisplay: 'British', priceRange: '$$$$', rating: 4.9, michelinStars: 3, availableTimes: ['6:30 PM', '8:00 PM'], imageUrl: 'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=400' },
-                { name: 'Hawksmoor', cuisineDisplay: 'Steakhouse', priceRange: '$$$', rating: 4.7, michelinStars: 0, availableTimes: ['7:00 PM', '8:00 PM', '9:30 PM'], imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400' }
-            ];
+            return mockRestaurantsData[selectedDestination] || mockRestaurantsData['London'];
+        }
+
+        // Update transportation based on destination
+        function updateTransportation() {
+            const transportContainer = document.getElementById('transportCards');
+            const transportOptions = {
+                'Paris': [
+                    { name: 'Mercedes S-Class', desc: 'Executive sedan • Up to 3 passengers', price: '$150', img: 'https://images.unsplash.com/photo-1563720360172-67b8f3dce741?w=400' },
+                    { name: 'Rolls Royce Ghost', desc: 'Ultra luxury • Up to 3 passengers', price: '$400', img: 'https://images.unsplash.com/photo-1631295868223-63265b40d9e4?w=400' },
+                    { name: 'Tesla Model S', desc: 'Electric luxury • Up to 4 passengers', price: '$120', img: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=400' }
+                ],
+                'London': [
+                    { name: 'Bentley Flying Spur', desc: 'British luxury • Up to 3 passengers', price: '$350', img: 'https://images.unsplash.com/photo-1563720360172-67b8f3dce741?w=400' },
+                    { name: 'Range Rover', desc: 'Luxury SUV • Up to 5 passengers', price: '$220', img: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400' },
+                    { name: 'Rolls Royce Phantom', desc: 'Ultra luxury • Up to 3 passengers', price: '$450', img: 'https://images.unsplash.com/photo-1631295868223-63265b40d9e4?w=400' }
+                ],
+                'Tokyo': [
+                    { name: 'Toyota Century', desc: 'Japanese luxury • Up to 3 passengers', price: '$280', img: 'https://images.unsplash.com/photo-1563720360172-67b8f3dce741?w=400' },
+                    { name: 'Lexus LS', desc: 'Executive sedan • Up to 3 passengers', price: '$180', img: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400' },
+                    { name: 'Alphard Executive', desc: 'Luxury van • Up to 6 passengers', price: '$200', img: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=400' }
+                ],
+                'Miami': [
+                    { name: 'Lamborghini Urus', desc: 'Supercar SUV • Up to 4 passengers', price: '$800', img: 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?w=400' },
+                    { name: 'Rolls Royce Cullinan', desc: 'Ultra luxury SUV • Up to 4 passengers', price: '$650', img: 'https://images.unsplash.com/photo-1631295868223-63265b40d9e4?w=400' },
+                    { name: 'Cadillac Escalade', desc: 'American luxury • Up to 6 passengers', price: '$250', img: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400' }
+                ]
+            };
+
+            const options = transportOptions[selectedDestination] || transportOptions['London'];
+            transportContainer.innerHTML = options.map(t => `
+                <div class="transport-card">
+                    <img src="${t.img}" alt="${t.name}">
+                    <div class="transport-info">
+                        <h4>${t.name}</h4>
+                        <p>${t.desc}</p>
+                    </div>
+                    <div class="transport-price">
+                        <div class="price">${t.price}</div>
+                        <div class="per">per transfer</div>
+                    </div>
+                </div>
+            `).join('');
         }
 
         // Initialize
